@@ -12,7 +12,7 @@ overlay
 br_netfilter
 EOF
 
-# Setup required sysctl params, these persist across reboots.
+# Setup required sysctl params, these persist across reboots. test
 cat <<EOF | sudo tee /etc/sysctl.d/99-kubernetes-cri.conf
 net.bridge.bridge-nf-call-iptables  = 1
 net.ipv4.ip_forward                 = 1
