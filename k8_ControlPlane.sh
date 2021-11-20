@@ -82,9 +82,12 @@ echo "alias k=kubectl" >> ~/.bashrc
 echo "complete -F __start_kubectl k"  >> ~/.bashrc
 
 #Configure our account on the Control Plane Node to have admin access to the API server from a non-privileged account.
-mkdir -p "$HOME/.kube"
-sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+USER_HOME=$(getent passwd $SUDO_USER | cut -d: -f6)
+echo $USER_HOME
+mkdir -p "$USER_HOME/.kube"
+sudo cp -i /etc/kubernetes/admin.conf $USER_HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
 
 #untaint master node
 kubectl taint nodes --all node-role.kubernetes.io/master- > /dev/null
