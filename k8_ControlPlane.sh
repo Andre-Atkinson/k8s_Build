@@ -1,5 +1,5 @@
 #!/bin/bash
-
+#################################
 #set variables
 ##IP Address of your ControlPlane
 CPIP=192.168.20.2
@@ -7,6 +7,9 @@ CPIP=192.168.20.2
 CPNAME=kube-1.lab.local
 ## POD NETWORK SUBNET (Make sure it doesnt overlap with your prod network IE use 10.0.0.0)
 PODSUBNET=10.0.0.0
+## Specify kubernetes version
+VERSION=1.22.4-00
+#################################
 
 #Update and upgrade
 apt-get -y update
@@ -48,7 +51,6 @@ echo "deb https://baltocdn.com/helm/stable/debian/ all main" |  tee /etc/apt/sou
 #Install the required packages, if needed we can request a specific version.
 apt-get  -y update 
 apt-get install -y containerd apt-transport-https ca-certificates curl
-VERSION=1.22.4-00
 apt-get install -y kubelet=$VERSION kubeadm=$VERSION kubectl=$VERSION helm nfs-common containerd apt-transport-https ca-certificates curl
 apt-mark hold kubelet kubeadm kubectl containerd
 
