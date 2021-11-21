@@ -1,6 +1,16 @@
 #!/bin/bash
- apt-get -y update
- apt-get -y upgrade
+
+#set variables
+##IP Address of your ControlPlane
+CPIP=192.168.20.2
+## Name of your ControlPlane server (Match DNS, eg kube-1.lab.local)
+CPNAME=kube-1.lab.local
+## POD NETWORK SUBNET (Make sure it doesnt overlap with your prod network IE use 10.0.0.0)
+PODSUBNET=10.0.0.0
+
+#Update and upgrade
+apt-get -y update
+apt-get -y upgrade
 
 #Disable swap
 swapoff -a
@@ -25,16 +35,6 @@ modprobe br_netfilter
 # Apply sysctl params without reboot
 sysctl --system
 
-#Install containerd
-apt-get  -y update 
-apt-get install -y containerd apt-transport-https ca-certificates curl
-
-#configure containerd
-mkdir -p /etc/containerd
-containerd config default |  tee /etc/containerd/config.toml
-sed -i 's/            SystemdCgroup = false/            SystemdCgroup = true/' /etc/containerd/config.toml
-systemctl restart containerd
-
 #add Google Cloud Public Signing Key
 curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
 
@@ -47,9 +47,16 @@ echo "deb https://baltocdn.com/helm/stable/debian/ all main" |  tee /etc/apt/sou
 
 #Install the required packages, if needed we can request a specific version.
 apt-get  -y update 
+apt-get install -y containerd apt-transport-https ca-certificates curl
 VERSION=1.22.4-00
-apt-get install -y kubelet=$VERSION kubeadm=$VERSION kubectl=$VERSION helm
-apt-mark hold kubelet kubeadm kubectl containerd helm
+apt-get install -y kubelet=$VERSION kubeadm=$VERSION kubectl=$VERSION helm nfs-common containerd apt-transport-https ca-certificates curl
+apt-mark hold kubelet kubeadm kubectl containerd
+
+#configure containerd
+mkdir -p /etc/containerd
+containerd config default |  tee /etc/containerd/config.toml
+sed -i 's/            SystemdCgroup = false/            SystemdCgroup = true/' /etc/containerd/config.toml
+systemctl restart containerd
 
 #Ensure both are set to start when the system starts up.
 systemctl enable kubelet.service
@@ -59,13 +66,13 @@ systemctl enable containerd.service
 kubeadm config print init-defaults | tee ClusterConfiguration.yaml > /dev/null
 
 #Change the address of the localAPIEndpoint.advertiseAddress to the Control Plane Node's IP address
-sed -i 's/  advertiseAddress: 1.2.3.4/  advertiseAddress: 192.168.20.2/' ClusterConfiguration.yaml
+sed -i "s/  advertiseAddress: 1.2.3.4/  advertiseAddress: $CPIP/" ClusterConfiguration.yaml
 
 #Set the CRI Socket to point to containerd
 sed -i 's/  criSocket: \/var\/run\/dockershim\.sock/  criSocket: \/run\/containerd\/containerd\.sock/' ClusterConfiguration.yaml
 
 #UPDATE: Added configuration to set the node name for the control plane node to the actual hostname
-sed -i 's/  name: node/  name: kube-1/' ClusterConfiguration.yaml
+sed -i "s/  name: node/  name: $CPNAME/" ClusterConfiguration.yaml
 
 #initalize Master Node
 kubeadm init --config=ClusterConfiguration.yaml
@@ -85,8 +92,8 @@ kubectl taint nodes --all node-role.kubernetes.io/master- > /dev/null
 curl https://docs.projectcalico.org/manifests/calico.yaml -O > /dev/null
 
 #change IP CIDR
-sed -i 's/            # - name: CALICO_IPV4POOL_CIDR/            - name: CALICO_IPV4POOL_CIDR/' calico.yaml > /dev/null
-sed -i 's/            #   value: "192.168.0.0\/16"/              value: "10.0.0.0\/16"/' calico.yaml > /dev/null
+sed -i 's/            # - name: CALICO_IPV4POOL_CIDR/            - name: CALICO_IPV4POOL_CIDR/' calico.yaml
+sed -i "s/            #   value: \"192.168.0.0\/16\"/              value: \"$PODSUBNET\/16\"/" calico.yaml
 
 #Deploy yaml file for your pod network.
 kubectl apply -f calico.yaml > /dev/null
