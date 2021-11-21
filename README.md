@@ -1,13 +1,14 @@
 # k8s_Build
 This script enables to build a working Kubernetes cluster on ubuntu 2004.
 
-There are two scripts, one that needs to be run on your ControlPlane and another for any worker nodes you plan to join to the cluster
+This will install Kubernetes version 1.22.4-00 using containerd and calico.
 
 Pre Reqs
-- Ubuntu 2004 (tested)
+- Ubuntu 2004 server
+- Functioning DNS both forward and reverse lookups
 
 CONTROL PLANE STEPS
-Step 1
+Step 1 
     Copy script to ControlPlane node
     sudo chmod 775 k8_ControlPlane.sh
     sudo ./k8_ControlPlane.sh
@@ -21,6 +22,8 @@ step 2 - Run as your normal user
     mkdir -p $HOME/.kube
     sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
     sudo chown $(id -u):$(id -g) $HOME/.kube/config
+    source <(kubectl completion bash)
+    echo "source <(kubectl completion bash)" >> ~/.bashrc
     alias k=kubectl
     complete -F __start_kubectl k
 
