@@ -15,8 +15,7 @@ Step 1
 
 Make note of the join command in the final output (It should look like the below)
 
-kubeadm join xxx.xxx.xx.xxx:6443 --token abcdef.xxxxxxxxxx \
-        --discovery-token-ca-cert-hash sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx 
+kubeadm join xxx.xxx.xx.xxx:6443 --token abcdef.xxxxxxxxxx --discovery-token-ca-cert-hash sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx 
 
 step 2 - Run as your normal user
 1. mkdir -p $HOME/.kube
