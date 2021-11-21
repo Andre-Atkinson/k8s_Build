@@ -56,7 +56,7 @@ systemctl enable kubelet.service
 systemctl enable containerd.service
 
 #modify Cluster config
-kubeadm config print init-defaults | tee ClusterConfiguration.yaml
+kubeadm config print init-defaults | tee ClusterConfiguration.yaml > /dev/null
 
 #Change the address of the localAPIEndpoint.advertiseAddress to the Control Plane Node's IP address
 sed -i 's/  advertiseAddress: 1.2.3.4/  advertiseAddress: 192.168.20.2/' ClusterConfiguration.yaml
@@ -70,21 +70,13 @@ sed -i 's/  name: node/  name: kube-1/' ClusterConfiguration.yaml
 #initalize Master Node
 kubeadm init --config=ClusterConfiguration.yaml
 
-# Not sure if the sleep is required..
-sleep 180
+#Create directory and copy kube config so root can run calico config
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
-#Configure our account on the Control Plane Node to have admin access to the API server from a non-privileged account.
-USER_HOME=$(getent passwd $_USER | cut -d: -f6)
-echo $USER_HOME
-mkdir -p "$USER_HOME/.kube"
-cp -i /etc/kubernetes/admin.conf $USER_HOME/.kube/config
-chown $(id -u):$(id -g) $USER_HOME/.kube/config
-
-#add autocompletion
-source <(kubectl completion bash)
-echo "source <(kubectl completion bash)" >> $USER_HOME/.bashrc
-echo "alias k=kubectl" >> $USER_HOME/.bashrc
-echo "complete -F __start_kubectl k"  >> $USER_HOME/.bashrc
+#sleep
+sleep 60
 
 #untaint master node
 kubectl taint nodes --all node-role.kubernetes.io/master- > /dev/null
