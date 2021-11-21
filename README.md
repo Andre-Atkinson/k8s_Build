@@ -9,7 +9,7 @@ Pre Reqs
 
 CONTROL PLANE STEPS
 Step 1 
-    Copy script to ControlPlane node
+    git clone https://github.com/Andre-Atkinson/k8s_Build.git
     sudo chmod 775 k8_ControlPlane.sh
     sudo ./k8_ControlPlane.sh
 
@@ -31,7 +31,7 @@ WORKER NODE STEPS
 If you wish to add any worker nodes then you will need to copy the k8_worker.sh script to the host you wish to use
 
 Step 1
-    Copy script to worker node
+    git clone https://github.com/Andre-Atkinson/k8s_Build.git
     sudo chmod 775 k8_worker.sh
     sudo ./k8_worker.sh
 
