@@ -10,8 +10,9 @@ Pre Reqs
 ## CONTROL PLANE STEPS
 Step 1
 1. git clone https://github.com/Andre-Atkinson/k8s_Build.git
-2. sudo chmod 775 k8_ControlPlane.sh
-3. sudo ./k8_ControlPlane.sh
+2. cd k8s_Build
+3. sudo chmod 775 k8_ControlPlane.sh
+4. sudo ./k8_ControlPlane.sh
 
 Make note of the join command in the final output (It should look like the below)
 
@@ -31,8 +32,9 @@ If you wish to add any worker nodes then you will need to copy the k8_worker.sh 
 
 Step 1
 1. git clone https://github.com/Andre-Atkinson/k8s_Build.git
-2. sudo chmod 775 k8_worker.sh
-3. sudo ./k8_worker.sh
+2. cd k8s_Build
+3. sudo chmod 775 k8_worker.sh
+4. sudo ./k8_worker.sh
 
 step 2 - Join to cluster using hte join token from the ControlPlane <br />
 sudo kubeadm join xxx.xxx.xx.xxx:6443 --token abcdef.xxxxxxxxxx --discovery-token-ca-cert-hash sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx 
