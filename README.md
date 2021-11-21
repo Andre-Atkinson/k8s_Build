@@ -9,6 +9,7 @@ Pre Reqs
 
 ## CONTROL PLANE STEPS
 Step 1
+Before running the script, make sure to edit the script and change the variables to suit your environment.
 
 ```
 git clone https://github.com/Andre-Atkinson/k8s_Build.git
