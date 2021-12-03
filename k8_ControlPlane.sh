@@ -11,8 +11,8 @@ PODSUBNET=10.244.0.0
 ## Specify kubernetes version
 VERSION=1.22.4-00
 ## Select CNI 
-CALICO=0
-WEAVENET=1
+CALICO=1
+WEAVENET=0
 #################################
 
 #Update and upgrade
