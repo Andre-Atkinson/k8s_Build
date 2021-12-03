@@ -5,10 +5,14 @@
 CPIP=192.168.20.2
 ## Name of your ControlPlane server (Match DNS, eg kube-1.lab.local)
 CPNAME=kube-1.lab.local
-## POD NETWORK SUBNET (Make sure it doesnt overlap with your prod network IE use 10.0.0.0)
-PODSUBNET=10.0.0.0
+## POD NETWORK SUBNET (this is a /16 but you do not need specify a CIDR as part of the variable)
+### Make sure whatever range you choose does not overlap with your node range(in my case 192.168.20.0/24) or the service range (10.96.0.0/12)
+PODSUBNET=10.244.0.0
 ## Specify kubernetes version
-VERSION=1.22.4-00
+VERSION=1.21.0-00
+## Select CNI 
+CALICO=0
+WEAVENET=1
 #################################
 
 #Update and upgrade
@@ -23,6 +27,13 @@ sed -i 's/\/swap.img/#\/swap.img/' /etc/fstab
 cat <<EOF |  tee /etc/modules-load.d/containerd.conf
 overlay
 br_netfilter
+EOF
+
+#configure crictl 
+cat <<EOF | tee /etc/crictl.yaml
+runtime-endpoint: unix:///run/containerd/containerd.sock
+image-endpoint: unix:///run/containerd/containerd.sock
+timeout: 10
 EOF
 
 # Setup required sysctl params, these persist across reboots. test
@@ -51,7 +62,7 @@ echo "deb https://baltocdn.com/helm/stable/debian/ all main" |  tee /etc/apt/sou
 #Install the required packages, if needed we can request a specific version.
 apt-get  -y update 
 apt-get install -y containerd apt-transport-https ca-certificates curl
-apt-get install -y kubelet=$VERSION kubeadm=$VERSION kubectl=$VERSION helm nfs-common containerd apt-transport-https ca-certificates curl
+apt-get install -y kubelet=$VERSION kubeadm=$VERSION kubectl=$VERSION helm nfs-common containerd apt-transport-https ca-certificates curl net-tools
 apt-mark hold kubelet kubeadm kubectl containerd
 
 #configure containerd
@@ -88,14 +99,26 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 sleep 60
 
 #untaint master node
-kubectl taint nodes --all node-role.kubernetes.io/master- > /dev/null
+kubectl taint nodes --all node-role.kubernetes.io/master-
 
 #install Calico
-curl https://docs.projectcalico.org/manifests/calico.yaml -O > /dev/null
+echo "Installing Calico"
+if [ $CALICO -eq 1 ]
+then
+    curl https://docs.projectcalico.org/manifests/calico.yaml -O 
 
-#change IP CIDR
-sed -i 's/            # - name: CALICO_IPV4POOL_CIDR/            - name: CALICO_IPV4POOL_CIDR/' calico.yaml
-sed -i "s/            #   value: \"192.168.0.0\/16\"/              value: \"$PODSUBNET\/16\"/" calico.yaml
+    #change IP CIDR
+    sed -i 's/            # - name: CALICO_IPV4POOL_CIDR/            - name: CALICO_IPV4POOL_CIDR/' calico.yaml
+    sed -i "s/            #   value: \"192.168.0.0\/16\"/              value: \"$PODSUBNET\/16\"/" calico.yaml
 
-#Deploy yaml file for your pod network.
-kubectl apply -f calico.yaml > /dev/null
+    #Deploy yaml file for your pod network.
+    kubectl apply -f calico.yaml
+fi
+
+#install WEAVENET
+echo "Installing Weavenet"
+if [ $WEAVENET -eq 1 ]
+then
+
+    kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')&env.IPALLOC_RANGE=$PODSUBNET/16"
+fi
