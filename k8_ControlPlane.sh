@@ -9,7 +9,7 @@ CPNAME=kube-1.lab.local
 ### Make sure whatever range you choose does not overlap with your node range(in my case 192.168.20.0/24) or the service range (10.96.0.0/12)
 PODSUBNET=10.244.0.0
 ## Specify kubernetes version
-VERSION=1.21.7-00
+VERSION=1.22.4-00
 ## Select CNI 
 CALICO=0
 WEAVENET=1
