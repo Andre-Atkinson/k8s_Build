@@ -1,7 +1,7 @@
 # k8s_Build
 This script enables to build a working Kubernetes cluster on ubuntu 2004.
 
-This will install Kubernetes version 1.22.4-00 using containerd and calico.
+This will install Kubernetes version 1.21.0-00 using containerd and calico or weavenet.
 
 Pre Reqs
 - Ubuntu 2004 server
