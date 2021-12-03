@@ -102,9 +102,9 @@ sleep 60
 kubectl taint nodes --all node-role.kubernetes.io/master-
 
 #install Calico
-echo "Installing Calico"
 if [ $CALICO -eq 1 ]
 then
+    echo "Installing Calico"
     curl https://docs.projectcalico.org/manifests/calico.yaml -O 
 
     #change IP CIDR
@@ -116,9 +116,8 @@ then
 fi
 
 #install WEAVENET
-echo "Installing Weavenet"
 if [ $WEAVENET -eq 1 ]
 then
-
+    echo "Installing Weavenet"
     kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')&env.IPALLOC_RANGE=$PODSUBNET/16"
 fi
