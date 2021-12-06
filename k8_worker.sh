@@ -2,7 +2,7 @@
 #################################
 #set variables
 ## Specify kubernetes version
-VERSION=1.21.0-00
+VERSION=1.22.4-00
 #################################
 
 apt-get -y update
