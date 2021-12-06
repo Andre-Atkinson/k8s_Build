@@ -4,7 +4,7 @@
 ##IP Address of your ControlPlane
 CPIP=192.168.20.2
 ## Name of your ControlPlane server (Match DNS, eg kube-1.lab.local)
-CPNAME=kube-1.lab.local
+CPNAME=kube-1
 ## POD NETWORK SUBNET (this is a /16 but you do not need specify a CIDR as part of the variable)
 ### Make sure whatever range you choose does not overlap with your node range(in my case 192.168.20.0/24) or the service range (10.96.0.0/12)
 PODSUBNET=10.244.0.0
