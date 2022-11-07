@@ -2,17 +2,14 @@
 #################################
 #set variables
 ##IP Address of your ControlPlane
-CPIP=192.168.20.2
+CPIP=192.168.20.60
 ## Name of your ControlPlane server (Match DNS, eg kube-1.lab.local)
-CPNAME=hostname
+CPNAME=kmaster
 ## POD NETWORK SUBNET (this is a /16 but you do not need specify a CIDR as part of the variable)
 ### Make sure whatever range you choose does not overlap with your node range(in my case 192.168.20.0/24) or the service range (10.96.0.0/12)
 PODSUBNET=10.244.0.0
 ## Specify kubernetes version
-VERSION=1.22.4-00
-## Select CNI 
-CALICO=1
-WEAVENET=0
+VERSION=1.23.13-00
 #################################
 
 #Update and upgrade
@@ -23,53 +20,63 @@ apt-get -y upgrade
 swapoff -a
 sed -i 's/\/swap.img/#\/swap.img/' /etc/fstab
 
-#containerd prereqs
-cat <<EOF |  tee /etc/modules-load.d/containerd.conf
+#Forwarding IPv4 and letting iptables see bridged traffic
+cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
 overlay
 br_netfilter
-EOF
-
-#configure crictl 
-cat <<EOF | tee /etc/crictl.yaml
-runtime-endpoint: unix:///run/containerd/containerd.sock
-image-endpoint: unix:///run/containerd/containerd.sock
-timeout: 10
-EOF
-
-# Setup required sysctl params, these persist across reboots. test
-cat <<EOF |  tee /etc/sysctl.d/99-kubernetes-cri.conf
-net.bridge.bridge-nf-call-iptables  = 1
-net.ipv4.ip_forward                 = 1
-net.bridge.bridge-nf-call-ip6tables = 1
 EOF
 
 modprobe overlay
 modprobe br_netfilter
 
+# sysctl params required by setup, params persist across reboots
+cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward                 = 1
+EOF
+
 # Apply sysctl params without reboot
 sysctl --system
 
+#install containerd
+
+sudo apt update
+
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list
+
+apt update
+apt install -y containerd.io ca-certificates curl gnupg lsb-release nfs-common apt-transport-https net-tools
+
+
+cat <<EOF | tee -a /etc/containerd/config.toml
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
+SystemdCgroup = true
+EOF
+
+sed -i 's/^disabled_plugins \=/\#disabled_plugins \=/g' /etc/containerd/config.toml
+
+systemctl restart containerd
+
+
+#####################################################
 #add Google Cloud Public Signing Key
 curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
 
 #Add Kubernetes apt Repo
-echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" |  tee /etc/apt/sources.list.d/kubernetes.list
+echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | tee /etc/apt/sources.list.d/kubernetes.list
 
 #Add Helm apt Repo
-curl https://baltocdn.com/helm/signing.asc |  apt-key add -
-echo "deb https://baltocdn.com/helm/stable/debian/ all main" |  tee /etc/apt/sources.list.d/helm-stable-debian.list
+curl https://baltocdn.com/helm/signing.asc | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" | tee /etc/apt/sources.list.d/helm-stable-debian.list
 
 #Install the required packages, if needed we can request a specific version.
 apt-get  -y update 
-apt-get install -y containerd apt-transport-https ca-certificates curl
-apt-get install -y kubelet=$VERSION kubeadm=$VERSION kubectl=$VERSION helm nfs-common containerd apt-transport-https ca-certificates curl net-tools
-apt-mark hold kubelet kubeadm kubectl containerd
-
-#configure containerd
-mkdir -p /etc/containerd
-containerd config default |  tee /etc/containerd/config.toml
-sed -i 's/            SystemdCgroup = false/            SystemdCgroup = true/' /etc/containerd/config.toml
-systemctl restart containerd
+apt-get install -y kubelet=$VERSION kubeadm=$VERSION kubectl=$VERSION helm 
+apt-mark hold kubelet kubeadm kubectl 
 
 #Ensure both are set to start when the system starts up.
 systemctl enable kubelet.service
@@ -81,11 +88,13 @@ kubeadm config print init-defaults | tee ClusterConfiguration.yaml > /dev/null
 #Change the address of the localAPIEndpoint.advertiseAddress to the Control Plane Node's IP address
 sed -i "s/  advertiseAddress: 1.2.3.4/  advertiseAddress: $CPIP/" ClusterConfiguration.yaml
 
-#Set the CRI Socket to point to containerd
-sed -i 's/  criSocket: \/var\/run\/dockershim\.sock/  criSocket: \/run\/containerd\/containerd\.sock/' ClusterConfiguration.yaml
-
 #UPDATE: Added configuration to set the node name for the control plane node to the actual hostname
 sed -i "s/  name: node/  name: $CPNAME/" ClusterConfiguration.yaml
+
+sed -i "/^networking:/a \  podSubnet: $PODSUBNET\/16" ClusterConfiguration.yaml
+
+#Set the CRI Socket to point to containerd
+sed -i 's/  criSocket: \/var\/run\/dockershim\.sock/  criSocket: \/run\/containerd\/containerd\.sock/' ClusterConfiguration.yaml
 
 #initalize Master Node
 kubeadm init --config=ClusterConfiguration.yaml
@@ -100,24 +109,16 @@ sleep 60
 
 #untaint master node
 kubectl taint nodes --all node-role.kubernetes.io/master-
+##kubectl taint nodes --all node-role.kubernetes.io/control-plane-
 
-#install Calico
-if [ $CALICO -eq 1 ]
-then
-    echo "Installing Calico"
-    curl https://docs.projectcalico.org/manifests/calico.yaml -O 
+#install Calico operator
+kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.24.4/manifests/tigera-operator.yaml
 
-    #change IP CIDR
-    sed -i 's/            # - name: CALICO_IPV4POOL_CIDR/            - name: CALICO_IPV4POOL_CIDR/' calico.yaml
-    sed -i "s/            #   value: \"192.168.0.0\/16\"/              value: \"$PODSUBNET\/16\"/" calico.yaml
+#Download Calico Custom resources
+curl https://raw.githubusercontent.com/projectcalico/calico/v3.24.4/manifests/custom-resources.yaml -O
 
-    #Deploy yaml file for your pod network.
-    kubectl apply -f calico.yaml
-fi
+#Change to PODSUBNET
+sed -i "s/      cidr: 192.168.0.0\/16/      cidr: ${PODSUBNET}\/16/" custom-resources.yaml
 
-#install WEAVENET
-if [ $WEAVENET -eq 1 ]
-then
-    echo "Installing Weavenet"
-    kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')&env.IPALLOC_RANGE=$PODSUBNET/16"
-fi
+#Configure custom resources
+kubectl create -f custom-resources.yaml
