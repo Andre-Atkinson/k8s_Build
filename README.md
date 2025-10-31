@@ -1,46 +1,67 @@
 # k8s_Build
-This script enables to build a working Kubernetes cluster on ubuntu 2004.
+This script enables building a working Kubernetes cluster on Ubuntu systems.
 
-This will install Kubernetes version 1.21.0-00 using containerd and calico or weavenet.
+This script will:
+- Install Kubernetes v1.33
+- Configure CRI-O v1.33 as the container runtime
+- Install Calico v3.30.3 for networking (on control plane)
+- Install Longhorn v1.10.0 for storage (on control plane)
 
-Pre Reqs
-- Ubuntu 2004 server
-- Functioning DNS both forward and reverse lookups
+## Pre-Requirements
+- Ubuntu server (recommended 20.04 or newer)
+- Functioning DNS (both forward and reverse lookups)
+- Root/sudo access
+- Internet connectivity
 
-## CONTROL PLANE STEPS
-Step 1
-Before running the script, make sure to edit the script and change the variables to suit your environment.
-
-```
+## CONTROL PLANE NODE SETUP
+Step 1 - Install and Configure Control Plane
+```bash
 git clone https://github.com/Andre-Atkinson/k8s_Build.git
 cd k8s_Build
-sudo chmod 775 k8_ControlPlane.sh
-sudo ./k8_ControlPlane.sh
+chmod +x k8_Build.sh
+sudo ./k8_Build.sh --control-plane
 ```
 
-Make note of the join command in the final output (It should look like the below)
+The script will:
+- Configure system settings
+- Install all required packages
+- Initialize the Kubernetes control plane
+- Install Calico CNI and Longhorn CSI
+- Set up kubectl with bash completion
+- Generate the cluster join command
 
-kubeadm join xxx.xxx.xx.xxx:6443 --token abcdef.xxxxxxxxxx --discovery-token-ca-cert-hash sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx 
+The join command will be automatically saved to your home directory as `~/k8s_join_cmd.sh`
 
-step 2 - Run as your normal user
-```
-mkdir -p $HOME/.kube
-sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-sudo chown $(id -u):$(id -g) $HOME/.kube/config
-source <(kubectl completion bash)
-echo "source <(kubectl completion bash)" >> ~/.bashrc
-alias k=kubectl
-complete -F __start_kubectl k
-```
-## WORKER NODE STEPS
-If you wish to add any worker nodes then you will need to copy the k8_worker.sh script to the host you wish to use
+## WORKER NODE SETUP
+To add worker nodes to your cluster:
 
-Step 1
-```
+Step 1 - Install Required Packages
+```bash
 git clone https://github.com/Andre-Atkinson/k8s_Build.git
 cd k8s_Build
-sudo chmod 775 k8_worker.sh
-sudo ./k8_worker.sh
+chmod +x k8_Build.sh
+sudo ./k8_Build.sh --worker
 ```
-step 2 - Join to cluster using hte join token from the ControlPlane <br />
-sudo kubeadm join xxx.xxx.xx.xxx:6443 --token abcdef.xxxxxxxxxx --discovery-token-ca-cert-hash sha256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx 
+
+Step 2 - Join the Cluster
+1. Copy the `k8s_join_cmd.sh` file from your control plane node's home directory to the worker node
+2. Make it executable and run it:
+```bash
+chmod +x k8s_join_cmd.sh
+sudo ./k8s_join_cmd.sh
+```
+
+## Verifying the Cluster
+On the control plane node, you can verify your cluster status:
+```bash
+kubectl get nodes
+kubectl get pods -A
+```
+
+## Features
+- Automated installation of all components
+- CRI-O container runtime
+- Calico networking
+- Longhorn storage
+- Helm package manager
+- Bash completion for kubectl 
