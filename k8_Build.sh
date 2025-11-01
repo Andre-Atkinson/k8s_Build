@@ -20,6 +20,12 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+# Set noninteractive frontend to avoid prompts
+export DEBIAN_FRONTEND=noninteractive
+
+##############################################
+############# ONYL EDIT BELOW  ###############
+##############################################
 # Variables
 KUBERNETES_VERSION=v1.33
 CRIO_VERSION=v1.33
@@ -28,6 +34,10 @@ LONGHORN_VERSION=v1.10.0
 METALLB_VERSION=v0.15.2
 NODE_NAME=$(hostname)
 ADDR_RANGE="192.168.20.150-192.168.20.160"
+
+##############################################
+############# STOP EDITING HERE ##############
+##############################################
 
 # Parse command line arguments
 NODE_TYPE=""
@@ -73,10 +83,10 @@ log "Updating package lists..."
 apt-get -y update
 
 log "Upgrading system packages..."
-apt-get -y upgrade
+apt-get -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" upgrade
 
 log "Installing common requirements..."
-apt-get install -y software-properties-common curl gpg apt-transport-https
+apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" software-properties-common curl gpg apt-transport-https
 
 #Step3:
 #Kuberenetes repo
@@ -96,7 +106,7 @@ echo "deb [signed-by=/usr/share/keyrings/helm.gpg] https://packages.buildkite.co
 #Step4:
 #Install Packages
 apt-get update
-apt-get install -y cri-o kubelet kubeadm kubectl helm
+apt-get install -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" cri-o kubelet kubeadm kubectl helm
 apt-mark hold kubelet kubeadm kubectl #Version 1.33
 
 #Step5:
@@ -114,12 +124,31 @@ if [[ "$NODE_TYPE" == "control-plane" ]]; then
     log "Waiting 60 seconds for control plane initialization..."
     sleep 60
 
-    # Set up kubeconfig for the root user
-    mkdir -p $HOME/.kube
-    cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-    chown $(id -u):$(id -g) $HOME/.kube/config
+    # Set up kubeconfig for both root and sudo user
+    # For root user
+    mkdir -p /root/.kube
+    cp -i /etc/kubernetes/admin.conf /root/.kube/config
+    chown root:root /root/.kube/config
+    
+    # For the user who ran sudo
+    USER_HOME=$(eval echo ~${SUDO_USER})
+    mkdir -p ${USER_HOME}/.kube
+    cp -i /etc/kubernetes/admin.conf ${USER_HOME}/.kube/config
+    chown ${SUDO_USER}:${SUDO_USER} ${USER_HOME}/.kube/config
+    
+    # Setup kubectl completion and aliases for both users
+    # For root
+    echo "source <(kubectl completion bash)" >> /root/.bashrc
+    echo "alias k=kubectl" >> /root/.bashrc
+    echo "complete -F __start_kubectl k" >> /root/.bashrc
+    
+    # For sudo user
+    echo "source <(kubectl completion bash)" >> ${USER_HOME}/.bashrc
+    echo "alias k=kubectl" >> ${USER_HOME}/.bashrc
+    echo "complete -F __start_kubectl k" >> ${USER_HOME}/.bashrc
+    
+    # Source for current session
     source <(kubectl completion bash)
-    echo "source <(kubectl completion bash)" >> ~/.bashrc
     alias k=kubectl
     complete -F __start_kubectl k
 
@@ -145,7 +174,7 @@ if [[ "$NODE_TYPE" == "control-plane" ]]; then
 	log "Installing MetalLB..."
 	kubectl apply -f "https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/config/manifests/metallb-native.yaml"
 
-    sleep 60
+    sleep 120
 
 	kubectl apply -f - <<-EOF
 		apiVersion: metallb.io/v1beta1
@@ -168,8 +197,8 @@ if [[ "$NODE_TYPE" == "control-plane" ]]; then
 	EOF
 
 
-    log "Waiting 60 seconds for Longhorn to initialize..."
-    sleep 60
+    log "Waiting 5 Minutes for MetalLB to initialize..."
+    sleep 600
 
     # Generate and save the join command to user's home directory
     USER_HOME=$(eval echo ~${SUDO_USER})
