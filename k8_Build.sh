@@ -156,50 +156,71 @@ if [[ "$NODE_TYPE" == "control-plane" ]]; then
     log "Removing NoSchedule taint from control plane node..."
     kubectl taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule-
 
-    log "Waiting 60 seconds for node configuration to settle..."
-    sleep 60
-
     # Install Calico CNI
     log "Installing Calico CNI..."
     kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml
 
-    log "Waiting 60 seconds for Calico to initialize..."
-    sleep 60
+    log "Waiting for Calico pods to be ready..."
+    kubectl wait --namespace calico-system \
+        --for=condition=ready pod \
+        --selector=k8s-app=calico-node \
+        --timeout=300s
+    
+    log "Waiting for Calico kube-controllers to be ready..."
+    kubectl wait --namespace calico-system \
+        --for=condition=ready pod \
+        --selector=k8s-app=calico-kube-controllers \
+        --timeout=300s
 
     # Install Longhorn CSI
     log "Installing Longhorn CSI..."
     kubectl apply -f https://raw.githubusercontent.com/longhorn/longhorn/${LONGHORN_VERSION}/deploy/longhorn.yaml
 
-    log "Waiting 60 seconds for Longhorn to initialize..."
-    sleep 60
+    log "Waiting for Longhorn pods to be ready..."
+    kubectl wait --namespace longhorn-system \
+        --for=condition=ready pod \
+        --selector=app=longhorn-manager \
+        --timeout=300s
 
     # Install MetalLB Loadbalancer
-	log "Installing MetalLB..."
-	kubectl apply -f "https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/config/manifests/metallb-native.yaml"
+    log "Installing MetalLB..."
+    kubectl apply -f "https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/config/manifests/metallb-native.yaml"
 
-    log "Configuring MetalLB with address range: ${ADDR_RANGE} ..."
-    log "Waiting 5 Minutes for MetalLB to initialize..."
-    sleep 600 
+    log "Waiting for MetalLB controller to be ready..."
+    kubectl wait --namespace metallb-system \
+        --for=condition=ready pod \
+        --selector=app=metallb,component=controller \
+        --timeout=300s
 
-	kubectl apply -f - <<-EOF
-		apiVersion: metallb.io/v1beta1
-		kind: IPAddressPool
-		metadata:
-		  name: first-pool
-		  namespace: metallb-system
-		spec:
-		  addresses:
-		    - ${ADDR_RANGE}
-		---
-		apiVersion: metallb.io/v1beta1
-		kind: L2Advertisement
-		metadata:
-		  name: example
-		  namespace: metallb-system
-		spec:
-		  ipAddressPools:
-		    - first-pool
-	EOF
+    log "Waiting for MetalLB speaker to be ready..."
+    kubectl wait --namespace metallb-system \
+        --for=condition=ready pod \
+        --selector=app=metallb,component=speaker \
+        --timeout=300s
+
+    log "Configuring MetalLB IP pool..."
+    kubectl apply -f - <<-EOF
+        apiVersion: metallb.io/v1beta1
+        kind: IPAddressPool
+        metadata:
+          name: first-pool
+          namespace: metallb-system
+        spec:
+          addresses:
+            - ${ADDR_RANGE}
+        ---
+        apiVersion: metallb.io/v1beta1
+        kind: L2Advertisement
+        metadata:
+          name: example
+          namespace: metallb-system
+        spec:
+          ipAddressPools:
+            - first-pool
+EOF
+
+    log "Verifying complete system readiness..."
+    kubectl wait --for=condition=ready pods --all --all-namespaces --timeout=300s
 
 
     # Generate and save the join command to user's home directory
