@@ -25,6 +25,9 @@ KUBERNETES_VERSION=v1.33
 CRIO_VERSION=v1.33
 CALICO_VERSION=v3.30.3
 LONGHORN_VERSION=v1.10.0
+METALLB_VERSION=v0.15.2
+NODE_NAME=$(hostname)
+ADDR_RANGE="192.168.20.150-192.168.20.160"
 
 # Parse command line arguments
 NODE_TYPE=""
@@ -108,6 +111,9 @@ if [[ "$NODE_TYPE" == "control-plane" ]]; then
     # Initialize the control plane
     kubeadm init #--pod-network-cidr=192.168.0.0/16 --kubernetes-version=$KUBERNETES_VERSION
 
+    log "Waiting 60 seconds for control plane initialization..."
+    sleep 60
+
     # Set up kubeconfig for the root user
     mkdir -p $HOME/.kube
     cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
@@ -117,13 +123,53 @@ if [[ "$NODE_TYPE" == "control-plane" ]]; then
     alias k=kubectl
     complete -F __start_kubectl k
 
+    # Untaint control plane node to allow pod scheduling
+    log "Removing NoSchedule taint from control plane node..."
+    kubectl taint nodes --all node-role.kubernetes.io/control-plane:NoSchedule-
+
+    log "Waiting 60 seconds for node configuration to settle..."
+    sleep 60
+
     # Install Calico CNI
     log "Installing Calico CNI..."
     kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml
 
+    log "Waiting 60 seconds for Calico to initialize..."
+    sleep 60
+
     # Install Longhorn CSI
     log "Installing Longhorn CSI..."
     kubectl apply -f https://raw.githubusercontent.com/longhorn/longhorn/${LONGHORN_VERSION}/deploy/longhorn.yaml
+
+    # Install MetalLB Loadbalancer
+	log "Installing MetalLB..."
+	kubectl apply -f "https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/config/manifests/metallb-native.yaml"
+
+    sleep 60
+
+	kubectl apply -f - <<-EOF
+		apiVersion: metallb.io/v1beta1
+		kind: IPAddressPool
+		metadata:
+		  name: first-pool
+		  namespace: metallb-system
+		spec:
+		  addresses:
+		    - ${ADDR_RANGE}
+		---
+		apiVersion: metallb.io/v1beta1
+		kind: L2Advertisement
+		metadata:
+		  name: example
+		  namespace: metallb-system
+		spec:
+		  ipAddressPools:
+		    - first-pool
+	EOF
+
+
+    log "Waiting 60 seconds for Longhorn to initialize..."
+    sleep 60
 
     # Generate and save the join command to user's home directory
     USER_HOME=$(eval echo ~${SUDO_USER})
