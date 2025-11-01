@@ -170,11 +170,16 @@ if [[ "$NODE_TYPE" == "control-plane" ]]; then
     log "Installing Longhorn CSI..."
     kubectl apply -f https://raw.githubusercontent.com/longhorn/longhorn/${LONGHORN_VERSION}/deploy/longhorn.yaml
 
+    log "Waiting 60 seconds for Longhorn to initialize..."
+    sleep 60
+
     # Install MetalLB Loadbalancer
 	log "Installing MetalLB..."
 	kubectl apply -f "https://raw.githubusercontent.com/metallb/metallb/${METALLB_VERSION}/config/manifests/metallb-native.yaml"
 
-    sleep 120
+    log "Configuring MetalLB with address range: ${ADDR_RANGE} ..."
+    log "Waiting 5 Minutes for MetalLB to initialize..."
+    sleep 600 
 
 	kubectl apply -f - <<-EOF
 		apiVersion: metallb.io/v1beta1
@@ -196,9 +201,6 @@ if [[ "$NODE_TYPE" == "control-plane" ]]; then
 		    - first-pool
 	EOF
 
-
-    log "Waiting 5 Minutes for MetalLB to initialize..."
-    sleep 600
 
     # Generate and save the join command to user's home directory
     USER_HOME=$(eval echo ~${SUDO_USER})
